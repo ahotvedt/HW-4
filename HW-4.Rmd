@@ -1,6 +1,6 @@
 ---
 title: "MATH 216 Homework 4"
-author: "WRITE YOUR NAME HERE"
+author: "Amanda Hotvedt"
 output:
   html_document:
     toc: true
@@ -16,6 +16,11 @@ library(USAboundaries)
 library(maptools)
 library(sp)
 library(broom)
+library(leaflet)
+library(dplyr)
+library(ggplot2)
+library(rgdal)
+library(readr)
 ```
 
 
@@ -24,10 +29,10 @@ library(broom)
 
 Please indicate
 
-* Who you collaborated with:
-* Roughly how much time you spent on this HW so far:
-* The URL of the RPubs published URL [here](https://www.nhl.com/).
-* What gave you the most trouble:
+* Who you collaborated with: Katherine Hobbs, Kyra Gray
+* Roughly how much time you spent on this HW so far: 6 hours
+* The URL of the RPubs published URL [here](http://rpubs.com/ahotvedt/HW4).
+* What gave you the most trouble: I have figured out how to get the map to work for any hub (latitude and longitude) that I input manually. However, I then tried a series of things to create a weighted mean using population and distance in order to find the ideal hub. The latitude and longitudes that this produced were very very small, and clearly don't make sense... So I'm still trying to figure out what went wrong there and how to fix my coding. I think I have wrapped my head around this question conceptually, and now just need to get R on the same page as I am!
 * Any comments you have:
 
 
@@ -44,23 +49,96 @@ which is marked on the map with a large red dot.
 ```{r, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=4.5}
 # Perform your computations here:
 
+# Load Social Explorer Data
+social_explorer_data <- read_csv("~/Desktop/Data Science/Homework/HW-4/R11276893_SL050.csv")
+
+social_explorer_data <- social_explorer_data %>% 
+  rename(total_pop = SE_T001_001) %>% 
+  mutate(Geo_FIPS_char = as.character(Geo_FIPS))
+
+# Polygons
+us_counties <- us_counties()
+
+# Centroids
+centroids <- coordinates(us_counties) %>% 
+  tbl_df()
+
+# Tidy
+us_counties_tidy <- tidy(us_counties, region="geoid")
+
+# Actual data
+us_counties_data <- us_counties@data
+
+# Join data with new centroid vectors
+us_counties_data2 <- bind_cols(us_counties_data, centroids)
+
+# Join data and the tidy format together
+us_counties_combined <- left_join(us_counties_tidy, us_counties_data2, by=c("id"="geoid"))
+
+# Join Social Explorer and Counties data
+counties_all <- left_join(us_counties_combined, social_explorer_data, by=c("id" = "Geo_FIPS_char"))
+
+# Filter out Alaska, Hawaii, Puerto Rico, and Fairfax County
+counties_all <- counties_all %>% 
+  filter(state_name != "Alaska") %>% 
+  filter(state_name != "Hawaii") %>% 
+  filter(state_name != "Puerto Rico") %>% 
+  rename(county_name = name) %>% 
+  filter(county_name != "Fairfax")
+
+# No more data sets I SWEAR
+FINAL <- counties_all %>% 
+  distinct(V1, V2, total_pop, group)
+
+# According to our dataset, the USA total population is 202,756,834
+FINAL %>% 
+  ungroup() %>% 
+  summarise(USA_total_pop = sum(total_pop))
+
+USA_total_pop <- 305355260
+
+# Finding the weighted mean of distance and population
+FINAL <- FINAL %>% 
+  mutate(weighted_lat = total_pop*V2/(USA_total_pop)) %>% 
+  mutate(weighted_long = total_pop*V1/(USA_total_pop))
+
+# This gives us one latitude and one longitude, which should be the 
+# ideal hub for the shipping company. However, as it stands right now,
+# this location does not make sense. The numbers are too small.
+
+FINAL %>% 
+  ungroup() %>% 
+  summarise(hub_long = mean(weighted_long), hub_lat = mean(weighted_lat))
+
+# Thus, for right now, I will pick an arbitrary point to allow the chloropleth map to work
+hub_long <- -96
+hub_lat <- 40
+
+# Defining a distance variable
+counties_all <- counties_all %>% 
+  mutate(distance = (((lat - hub_lat)^2) + ((long - hub_long)^2))^(1/2))
+
+
+
 ```
 
 
-```{r, eval=FALSE, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=4.5}
+```{r, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, fig.width=8, fig.height=4.5}
 # Here is a template of a ggplot call; feel free to change this to suit your
 # needs. Once your computations above are complete, set the eval=TRUE on the
 # line above to tell R Markdown to run this code block.
-ggplot(data=geo_data, aes(x=long, y=lat, group=group, fill=distance)) +
+ggplot(data=counties_all, aes(x=long, y=lat, group=group, fill=distance)) +
   # Plot choropleth polygons, low -> high being colored white -> dark green
   geom_polygon() +
-  scale_fill_gradient(low="white", high="darkgreen") + 
+  scale_fill_gradient(low="white", high="darkblue") + 
   # Trace outlines of areas
   geom_path(size=0.1) +
   # Mark hub
-  annotate("point", x=hub_x_coord, y=hub_y_coord, col="red", size=5) +
+  annotate("point", x=hub_long, y=hub_lat, col="red", size=3) +
   # Correct aspect ratio for map
-  coord_map()
+  coord_map(xlim=c(-130,-65), ylim=c(20,50))
+
+         
 ```
 
 
