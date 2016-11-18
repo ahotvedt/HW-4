@@ -30,10 +30,10 @@ library(readr)
 Please indicate
 
 * Who you collaborated with: Katherine Hobbs, Kyra Gray
-* Roughly how much time you spent on this HW so far: 6 hours
+* Roughly how much time you spent on this HW so far: 8 hours
 * The URL of the RPubs published URL [here](http://rpubs.com/ahotvedt/HW4).
-* What gave you the most trouble: I have figured out how to get the map to work for any hub (latitude and longitude) that I input manually. However, I then tried a series of things to create a weighted mean using population and distance in order to find the ideal hub. The latitude and longitudes that this produced were very very small, and clearly don't make sense... So I'm still trying to figure out what went wrong there and how to fix my coding. I think I have wrapped my head around this question conceptually, and now just need to get R on the same page as I am!
-* Any comments you have:
+* What gave you the most trouble: 
+* Any comments you have: I believe my chloropleth map deliverable identifies the ideal shipping hub for DHL! However, I ended up defining so many different data sets throughout the process, which may be hard for someone who is examining my work to follow/understand. I commented out a lot of instructions to try to explain my workflow - so hopefully that will make sense to you! 
 
 
 
@@ -52,9 +52,11 @@ which is marked on the map with a large red dot.
 # Load Social Explorer Data
 social_explorer_data <- read_csv("~/Desktop/Data Science/Homework/HW-4/R11276893_SL050.csv")
 
+# Calculating the total US population
 social_explorer_data <- social_explorer_data %>% 
   rename(total_pop = SE_T001_001) %>% 
-  mutate(Geo_FIPS_char = as.character(Geo_FIPS))
+  mutate(Geo_FIPS_char = as.character(Geo_FIPS)) %>% 
+  mutate(USA_total_pop = sum(total_pop))
 
 # Polygons
 us_counties <- us_counties()
@@ -86,39 +88,27 @@ counties_all <- counties_all %>%
   rename(county_name = name) %>% 
   filter(county_name != "Fairfax")
 
-# No more data sets I SWEAR
-FINAL <- counties_all %>% 
-  distinct(V1, V2, total_pop, group)
-
-# According to our dataset, the USA total population is 202,756,834
-FINAL %>% 
-  ungroup() %>% 
-  summarise(USA_total_pop = sum(total_pop))
-
-USA_total_pop <- 305355260
-
-# Finding the weighted mean of distance and population
-FINAL <- FINAL %>% 
-  mutate(weighted_lat = total_pop*V2/(USA_total_pop)) %>% 
-  mutate(weighted_long = total_pop*V1/(USA_total_pop))
-
+# Finding the weighted mean of distance and population then summing them.
 # This gives us one latitude and one longitude, which should be the 
-# ideal hub for the shipping company. However, as it stands right now,
-# this location does not make sense. The numbers are too small.
-
-FINAL %>% 
+# ideal hub for the shipping company.
+FINAL <- counties_all %>% 
+  distinct(V1, V2, total_pop, group, USA_total_pop) %>% 
   ungroup() %>% 
-  summarise(hub_long = mean(weighted_long), hub_lat = mean(weighted_lat))
+  mutate(weighted_lat = total_pop*V2/(USA_total_pop)) %>% 
+  mutate(weighted_long = total_pop*V1/(USA_total_pop)) %>% 
+  mutate(hub_long = sum(weighted_long), hub_lat = sum(weighted_lat))
 
-# Thus, for right now, I will pick an arbitrary point to allow the chloropleth map to work
-hub_long <- -96
-hub_lat <- 40
+# These numbers came from the hub_long and hub_lat variable in FINAL.
+# Obviously defining them this way (essentially hard-coding) isn't a best
+# practice, but this allowed me to preserve my counties_all data while
+# using the 'distinct' function in the FINAL data set to calculate the
+# ideal shipping hub's latitude and longitude.
+hub_lat <- 40.6
+hub_long <- -101.3
 
 # Defining a distance variable
 counties_all <- counties_all %>% 
   mutate(distance = (((lat - hub_lat)^2) + ((long - hub_long)^2))^(1/2))
-
-
 
 ```
 
